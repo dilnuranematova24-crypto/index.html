@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sehrli Kvadrat - O'yin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap');
+        body { font-family: 'Fredoka', sans-serif; background: #0f172a; color: #fff; overflow-x: hidden; }
+        .option-card { transition: all 0.3s ease; cursor: pointer; }
+        .option-card:hover { transform: translateY(-5px) scale(1.03); box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.5); }
+        @keyframes flyToRight {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: translate(300px, -200px) scale(0.5) rotate(45deg); }
+            100% { transform: translate(500px, -300px) scale(0); opacity: 0; }
+        }
+        @keyframes flyToLeft {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: translate(-300px, -200px) scale(0.5) rotate(-45deg); }
+            100% { transform: translate(-500px, -300px) scale(0); opacity: 0; }
+        }
+        .animate-right { animation: flyToRight 0.8s forwards ease-in-out; }
+        .animate-left { animation: flyToLeft 0.8s forwards ease-in-out; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-between p-4">
+
+    <!-- Header / Score -->
+    <div class="w-full max-w-6xl flex justify-between items-center bg-slate-900 border-2 border-indigo-700/50 rounded-2xl p-4 shadow-xl mb-4">
+        <h1 class="text-2xl md:text-3xl font-bold text-yellow-400 flex items-center gap-2">🪄 Sehrli Kvadrat: Scratch O'yini</h1>
+        <div class="flex gap-4 text-lg">
+            <span class="bg-indigo-950 px-4 py-1.5 rounded-xl border border-indigo-800">Savol: <span id="current-q-num" class="text-yellow-400 font-bold">1</span>/10</span>
+            <span class="bg-indigo-950 px-4 py-1.5 rounded-xl border border-indigo-800">Ball: <span id="score" class="text-green-400 font-bold">0</span></span>
+        </div>
+    </div>
+
+    <!-- Main Game Arena with Baskets -->
+    <div class="w-full max-w-6xl flex flex-col md:flex-row justify-between items-center gap-6 my-auto relative">
+        
+        <!-- Left Basket (Xato) -->
+        <div id="left-basket" class="w-48 h-48 bg-red-950/80 border-4 border-dashed border-red-500 rounded-3xl flex flex-col items-center justify-center p-4 text-center shadow-lg transition-transform duration-300">
+            <span class="text-4xl mb-2">🗑️</span>
+            <span class="text-red-400 font-bold text-xl">Xato savati</span>
+            <span id="wrong-count" class="text-sm text-red-300 mt-1">0 ta xato</span>
+        </div>
+
+        <!-- Center: Top Options Grid (7-8 squares) -->
+        <div class="flex-1 w-full max-w-2xl">
+            <div id="options-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <!-- Dynamic Options will load here -->
+            </div>
+        </div>
+
+        <!-- Right Basket (To'g'ri) -->
+        <div id="right-basket" class="w-48 h-48 bg-emerald-950/80 border-4 border-dashed border-emerald-500 rounded-3xl flex flex-col items-center justify-center p-4 text-center shadow-lg transition-transform duration-300">
+            <span class="text-4xl mb-2">🎯</span>
+            <span class="text-emerald-400 font-bold text-xl">To'g'ri savat</span>
+            <span id="correct-count" class="text-sm text-emerald-300 mt-1">0 ta to'g'ri</span>
+        </div>
+
+    </div>
+
+    <!-- Bottom: Large Question Box -->
+    <div class="w-full max-w-4xl bg-slate-900 border-4 border-indigo-600 rounded-3xl p-6 shadow-2xl mt-4 text-center">
+        <p class="text-indigo-300 text-sm font-semibold uppercase tracking-wider mb-2">Savol sharti:</p>
+        <h2 id="question-text" class="text-xl md:text-2xl font-bold text-yellow-300 min-h-[80px] flex items-center justify-center">
+            Savol yuklanmoqda...
+        </h2>
+    </div>
+
+    <!-- Result Modal -->
+    <div id="result-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-900 border-4 border-yellow-500 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl">
+            <h2 class="text-4xl font-bold text-yellow-400 mb-4">🎉 O'yin yakunlandi!</h2>
+            <p id="final-stats" class="text-xl mb-6 text-indigo-200"></p>
+            <button onclick="restartGame()" class="bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xl px-8 py-3 rounded-2xl shadow-lg transition-transform hover:scale-105">Qaytadan o'ynash</button>
+        </div>
+    </div>
+
+    <script>
+        // Web Audio API Sound Generator
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playApplauseSound() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            let now = audioCtx.currentTime;
+            for (let i = 0; i < 6; i++) {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(350 + i * 80, now + i * 0.07);
+                gain.gain.setValueAtTime(0.25, now + i * 0.07);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.07 + 0.1);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now + i * 0.07);
+                osc.stop(now + i * 0.07 + 0.1);
+            }
+        }
+
+        function playGlassBreakSound() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            let now = audioCtx.currentTime;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(1400, now);
+            osc.frequency.exponentialRampToValueAtTime(150, now + 0.35);
+            gain.gain.setValueAtTime(0.4, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.35);
+        }
+
+        // 10 Scratch Chapter Questions with 8 options each
+        const questions = [
+            {
+                question: "Scratch dasturida loyihani ishga tushirish uchun qaysi belgi bosiladi?",
+                correct: "Yashil bayroqcha (Green Flag)",
+                options: [
+                    "Qizil doira (Stop)",
+                    "Yashil bayroqcha (Green Flag)",
+                    "Bo'sh joy tugmasi",
+                    "Sichqoncha tugmasi",
+                    "Sahna o'lchami",
+                    "Fon rasmi",
+                    "Kostyumni o'chirish",
+                    "Ovoz yozish"
+                ]
+            },
+            {
+                question: "Aktyor (spayt) ko'rinishini o'zgartirish uchun qaysi bo'limdagi blokdan foydalaniladi?",
+                correct: "Looks (Ko'rinish)",
+                options: [
+                    "Motion (Harakat)",
+                    "Sound (Ovoz)",
+                    "Looks (Ko'rinish)",
+                    "Events (Voqealar)",
+                    "Control (Boshqaruv)",
+                    "Sensors (Datchiklar)",
+                    "Operators (Operatorlar)",
+                    "Variables (O'zgaruvchilar)"
+                ]
+            },
+            {
+                question: "Aktyor ma'lum bir vaqt davomida gapirishi uchun qaysi blok ishlatiladi?",
+                correct: "say [Salom!] for (2) seconds",
+                options: [
+                    "move (10) steps",
+                    "play sound [Meow]",
+                    "say [Salom!] for (2) seconds",
+                    "wait (1) seconds",
+                    "repeat (10)",
+                    "if <touching?> then",
+                    "set size to (100)",
+                    "clear graphic effects"
+                ]
+            },
+            {
+                question: "Scratch sahnasining standart eni (kengligi) necha pikseldan iborat?",
+                correct: "480 piksel",
+                options: [
+                    "360 piksel",
+                    "480 piksel",
+                    "100 piksel",
+                    "240 piksel",
+                    "180 piksel",
+                    "600 piksel",
+                    "1920 piksel",
+                    "1080 piksel"
+                ]
+            },
+            {
+                question: "Doimiy takrorlanuvchi sikl bloki qaysi guruhga tegishli va qanday nomlanadi?",
+                correct: "Control: forever (Doimiy)",
+                options: [
+                    "Motion: move 10",
+                    "Control: forever (Doimiy)",
+                    "Events: when clicked",
+                    "Looks: next costume",
+                    "Sound: play sound",
+                    "Variables: set x",
+                    "Sensors: key pressed",
+                    "Operators: pick random"
+                ]
+            },
+            {
+                question: "Aktyorning sahna markazidagi boshlang'ich koordinatalari qanday?",
+                correct: "X: 0, Y: 0",
+                options: [
+                    "X: 240, Y: 180",
+                    "X: -240, Y: -180",
+                    "X: 0, Y: 0",
+                    "X: 100, Y: 100",
+                    "X: -100, Y: 100",
+                    "X: 0, Y: 180",
+                    "X: 240, Y: 0",
+                    "X: -240, Y: 180"
+                ]
+            },
+            {
+                question: "Ovozni tugaguncha kutmasdan shart bajarilishini ta'minlovchi blok:",
+                correct: "start sound [Meow]",
+                options: [
+                    "play sound [Meow] until done",
+                    "start sound [Meow]",
+                    "stop all sounds",
+                    "change volume by (-10)",
+                    "set volume to (100%)",
+                    "clear sound effects",
+                    "loudness sensor",
+                    "timer reset"
+                ]
+            },
+            {
+                question: "Aktyor o'lchamini kattalashtirish yoki kichiklashtirish uchun ishlatiladi:",
+                correct: "change size by (10)",
+                options: [
+                    "point in direction (90)",
+                    "go to x: (0) y: (0)",
+                    "change size by (10)",
+                    "next costume",
+                    "switch backdrop",
+                    "turn right (15) degrees",
+                    "glide (1) secs to x:0 y:0",
+                    "bounce if on edge"
+                ]
+            },
+            {
+                question: "Sahnaga yangi fon (backdrop) qo'shish uchun qayerdan foydalaniladi?",
+                correct: "Choose a Backdrop tugmasidan",
+                options: [
+                    "Choose a Sprite tugmasidan",
+                    "Choose a Backdrop tugmasidan",
+                    "Costumes bo'limidan",
+                    "Sounds bo'limidan",
+                    "File menyusidan",
+                    "Edit menyusidan",
+                    "Variables yaratish orqali",
+                    "Extensions qo'shish orqali"
+                ]
+            },
+            {
+                question: "Scratch sahnasining standart balandligi necha pikseldan iborat?",
+                correct: "360 piksel",
+                options: [
+                    "480 piksel",
+                    "360 piksel",
+                    "240 piksel",
+                    "180 piksel",
+                    "500 piksel",
+                    "720 piksel",
+                    "1080 piksel",
+                    "90 piksel"
+                ]
+            }
+        ];
+
+        let currentQIndex = 0;
+        let score = 0;
+        let correctCount = 0;
+        let wrongCount = 0;
+        let isAnswerLocked = false;
+
+        function loadQuestion() {
+            if (currentQIndex >= questions.length) {
+                showResults();
+                return;
+            }
+
+            isAnswerLocked = false;
+            document.getElementById('current-q-num').innerText = currentQIndex + 1;
+            const qData = questions[currentQIndex];
+            document.getElementById('question-text').innerText = qData.question;
+
+            const grid = document.getElementById('options-grid');
+            grid.innerHTML = '';
+
+            // Shuffle options
+            let shuffledOptions = [...qData.options];
+            shuffledOptions.sort(() => Math.random() - 0.5);
+
+            shuffledOptions.forEach(opt => {
+                const card = document.createElement('div');
+                card.className = "option-card bg-indigo-900/90 border-2 border-indigo-600 rounded-2xl p-4 flex items-center justify-center text-center font-semibold text-sm md:text-base h-24 select-none shadow-md";
+                card.innerText = opt;
+                card.onclick = () => selectAnswer(card, opt, qData.correct);
+                grid.appendChild(card);
+            });
+        }
+
+        function selectAnswer(cardEl, selectedText, correctText) {
+            if (isAnswerLocked) return;
+            isAnswerLocked = true;
+
+            const isCorrect = (selectedText === correctText);
+            const rightBasket = document.getElementById('right-basket');
+            const leftBasket = document.getElementById('left-basket');
+
+            if (isCorrect) {
+                playApplauseSound();
+                correctCount++;
+                score += 10;
+                document.getElementById('score').innerText = score;
+                document.getElementById('correct-count').innerText = `${correctCount} ta to'g'ri`;
+                
+                cardEl.classList.remove('bg-indigo-900', 'border-indigo-600');
+                cardEl.classList.add('bg-emerald-600', 'border-emerald-300', 'animate-right');
+                rightBasket.classList.add('scale-110', 'border-emerald-400');
+                setTimeout(() => rightBasket.classList.remove('scale-110', 'border-emerald-400'), 800);
+            } else {
+                playGlassBreakSound();
+                wrongCount++;
+                document.getElementById('wrong-count').innerText = `${wrongCount} ta xato`;
+
+                cardEl.classList.remove('bg-indigo-900', 'border-indigo-600');
+                cardEl.classList.add('bg-red-600', 'border-red-300', 'animate-left');
+                leftBasket.classList.add('scale-110', 'border-red-400');
+                setTimeout(() => leftBasket.classList.remove('scale-110', 'border-red-400'), 800);
+            }
+
+            currentQIndex++;
+            setTimeout(loadQuestion, 900);
+        }
+
+        function showResults() {
+            document.getElementById('result-modal').classList.remove('hidden');
+            document.getElementById('final-stats').innerHTML = `
+                To'plagan ballingiz: <b class="text-green-400">${score}</b><br>
+                To'g'ri javoblar: <span class="text-emerald-400">${correctCount} ta</span><br>
+                Xato javoblar: <span class="text-red-400">${wrongCount} ta</span>
+            `;
+        }
+
+        function restartGame() {
+            currentQIndex = 0;
+            score = 0;
+            correctCount = 0;
+            wrongCount = 0;
+            document.getElementById('score').innerText = score;
+            document.getElementById('correct-count').innerText = `0 ta to'g'ri`;
+            document.getElementById('wrong-count').innerText = `0 ta xato`;
+            document.getElementById('result-modal').classList.add('hidden');
+            loadQuestion();
+        }
+
+        // Initialize game
+        loadQuestion();
+    </script>
+</body>
+</html>
